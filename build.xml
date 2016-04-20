@@ -23,6 +23,7 @@
 		<pathelement location="${libraries}/edtftpj.jar"/>
 		<pathelement location="${libraries}/jdbm.jar"/>
 		<pathelement location="${libraries}/commons-compress-1.0.jar"/>
+		<pathelement location="${libraries}/commons-cli-1.3.1.jar"/>
 		<pathelement location="${libraries}/jai_imageio.jar"/>
 		<pathelement location="${libraries}/pixelmed_codec.jar"/>
 		<pathelement location="${libraries}/email/activation.jar"/>

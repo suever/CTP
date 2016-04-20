@@ -7,6 +7,8 @@
 
 package org.rsna.installer;
 
+import org.apache.commons.cli.*;
+
 import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
@@ -36,16 +38,25 @@ import org.xml.sax.InputSource;
  * This class unpacks files from its own jar file into a
  * directory selected by the user.
  */
-public class Installer extends JFrame {
+public class Installer {
 
-	JPanel			mainPanel;
-	JEditorPane		textPane;
-	JFileChooser	chooser;
+	//GUI JPanel			mainPanel;
+	//GUI JEditorPane		textPane;
+	//GUI JFileChooser	chooser;
 	File			installer;
 	File			directory;
 	boolean 		suppressFirstPathElement = false;
-	ColorPane		cp;
-	Color			bgColor = new Color(0xb9d0ed);
+
+	class Stream {
+		public void appendln(Color color, String str){ System.out.println(str);}
+		public void appendln(String str){ System.out.println(str); }
+		public void append(String str){ System.out.printf(str); }
+	}
+
+	Stream 			cp;
+
+	//GUI ColorPane		cp;
+	//GUI Color			bgColor = new Color(0xb9d0ed);
 
 	String windowTitle = "CTP Installer";
 	String programName = "CTP";
@@ -59,9 +70,10 @@ public class Installer extends JFrame {
 	String thisJava = "";
 	String thisJavaBits = "";
 	boolean imageIOTools = false;
+	int port = 1080;
 
 	public static void main(String args[]) {
-		new Installer();
+		new Installer(args);
 	}
 
 	/**
@@ -69,21 +81,28 @@ public class Installer extends JFrame {
 	 * introducing the program, allows the user to select an install directory,
 	 * and copies files from the jar into the directory.
 	 */
-	public Installer() {
-		super();
-		addWindowListener(new WindowAdapter() {
-			public void windowClosing( WindowEvent evt ) { exit(); }
-		});
 
-		//Make a text pane to record the details
-		cp = new ColorPane();
+	public Installer(String args[]) {
+		// Inputs are --install-dir INSTALL_DIR
+		for (int k = 0; k < args.length; k=k+2){
+
+			switch (args[k]) {
+				case "--install-dir": 
+					directory = new File(args[k+1]);
+					System.out.println(directory);
+					break;
+				case "--port":
+					port = Integer.parseInt(args[k+1]);
+					break;
+			}
+		}
+
+		cp = new Stream();
 
 		//Find the installer program so we can get to the files.
 		installer = getInstallerProgramFile();
 		String name = installer.getName();
 		programName = (name.substring(0, name.indexOf("-"))).toUpperCase();
-		windowTitle = programName + " Installer";
-		setTitle(windowTitle);
 
 		//Get the installation information
 		thisJava = System.getProperty("java.version");
@@ -136,27 +155,7 @@ public class Installer extends JFrame {
 			thisJava = "<b><font color=\"red\">"+thisJava+"</font></b>";
 		}
 
-		//Set up the UI
-		JSplitPane splitPane = new JSplitPane( JSplitPane.VERTICAL_SPLIT);
-		splitPane.setContinuousLayout(true);
-
-		textPane = new JEditorPane( "text/html", getWelcomePage() );
-		textPane.setEditable(false);
-		textPane.setBackground(bgColor);
-		splitPane.setTopComponent(textPane);
-
-		JScrollPane jsp = new JScrollPane();
-		jsp.setViewportView(cp);
-		splitPane.setBottomComponent(jsp);
-
-		this.getContentPane().add( splitPane, BorderLayout.CENTER );
-		pack();
-		positionFrame();
-		setVisible(true);
-		splitPane.setDividerLocation(0.6f);
-
-		//Get the directory for installing the program
-		if ((directory=getDirectory()) == null) exit();
+		if ( directory == null ) exit();
 
 		//Point to the parent of the directory in which to install the program.
 		//so the copy process works correctly for directory trees.
@@ -182,13 +181,9 @@ public class Installer extends JFrame {
 		cleanup(directory);
 
 		//Get a port for the server.
-		int port = getPort();
 		if (port < 0) {
 			if (checkServer(-port, false)) {
-				JOptionPane.showMessageDialog(this,
-					"CTP appears to be running.\nPlease stop CTP and run the installer again.",
-					"Server is Running",
-					JOptionPane.INFORMATION_MESSAGE);
+				System.err.println("CTP appears to be running.\nPlease stop CTP and run the installer again.");
 				System.exit(0);
 			}
 		}
@@ -206,28 +201,20 @@ public class Installer extends JFrame {
 			//Make any necessary changes in the config file to reflect schema evolution
 			fixConfigSchema();
 
-			cp.append("Installation complete.");
-
-			JOptionPane.showMessageDialog(this,
-					programName+" has been installed successfully.\n"
-					+ count + " files were installed.",
-					"Installation Complete",
-					JOptionPane.INFORMATION_MESSAGE);
+			System.out.println("Installation complete.");
+			System.out.println(programName+" has been installed successfully.");
+			System.out.println(count + " files were installed.");
 		}
 		else {
-			cp.append("Installation failed.");
-
-			JOptionPane.showMessageDialog(this,
-					programName+" could not be fully installed.",
-					"Installation Failed",
-					JOptionPane.INFORMATION_MESSAGE);
+			System.err.println("Installation failed.");
+			System.err.println(programName+" could not be fully installed.");
 		}
-		if (!programName.equals("ISN") && startLauncher(new File(directory, "CTP"))) System.exit(0);
+		if (!programName.equals("ISN") && startRunner(new File(directory, "CTP"))) System.exit(0);
 	}
 
 	//Get the installer program file by looking in the user.dir for [programName]-installer.jar.
 	private File getInstallerProgramFile() {
-		cp.appendln(Color.black, "Looking for the installer program file");
+		System.out.println("Looking for the installer program file");
 		File programFile;
 		try { programFile = new File(this.getClass().getProtectionDomain().getCodeSource().getLocation().toURI()); }
 		catch (Exception ex) {
@@ -235,13 +222,9 @@ public class Installer extends JFrame {
 			programFile = new File(name+"-installer.jar");
 		}
 		programFile = new File( programFile.getAbsolutePath() );
-		if (programFile.exists()) cp.appendln(Color.black, "...found "+programFile);
+		if (programFile.exists()) System.out.println("...found "+programFile);
 		else {
-			cp.appendln(Color.red, "...unable to find the program file "+programFile+"\n...exiting.");
-			JOptionPane.showMessageDialog(this,
-					"Unable to find the installer program file.\n"+programFile,
-					"Installation Failed",
-					JOptionPane.INFORMATION_MESSAGE);
+			System.err.println("...unable to find the program file "+programFile+"\n...exiting.");
 			exit();
 		}
 		return programFile;
@@ -291,7 +274,7 @@ public class Installer extends JFrame {
 						dirFile.mkdirs();
 					}
 					if (!entry.isDirectory()) {
-						cp.appendln(Color.black, "Installing "+outFile);
+						System.out.println("Installing "+outFile);
 						//Copy the file
 						BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(outFile));
 						BufferedInputStream in = new BufferedInputStream(zipFile.getInputStream(entry));
@@ -310,14 +293,12 @@ public class Installer extends JFrame {
 			zipFile.close();
 		}
 		catch (Exception e) {
-			cp.appendln(Color.red, "...an error occurred while installing "+outFile);
+			System.err.println("...an error occured while installing "+outFile);
 			e.printStackTrace();
-			JOptionPane.showMessageDialog(this,
-					"Error copying " + outFile.getName() + "\n" + e.getMessage(),
-					"I/O Error", JOptionPane.INFORMATION_MESSAGE);
+			System.err.println("Error copying "+outFile.getName() + "\n" + e.getMessage());
 			return -count;
 		}
-		cp.appendln(Color.black, count + " files were installed.");
+		System.out.println(count + " files were installed.");
 		return count;
 	}
 
@@ -435,47 +416,6 @@ public class Installer extends JFrame {
 		}
 	}
 
-	//Let the user select an installation directory.
-	private File getDirectory() {
-		cp.appendln(Color.black, "Finding a directory in which to install the program");
-		//Pick the first of these directories which exists:
-		//1. "JavaPrograms" in the root of the current drive.
-		//2. programName (e.g., "CTP") in the root of the current drive.
-		//3. user.dir in the System properties.
-		File currentDirectory = new File( System.getProperty( "user.dir" ) );
-		File root = new File(File.separator);
-		File programDir = new File(root, "CTP");
-		File rsnaDir = new File(root, "RSNA");
-		File tfsDir = new File(root, "TFS");
-		File javaPrograms = new File(root, "JavaPrograms");
-		if (javaPrograms.exists() && javaPrograms.isDirectory()) {
-			currentDirectory = javaPrograms;
-		}
-		else if (rsnaDir.exists() && rsnaDir.isDirectory()) {
-			currentDirectory = rsnaDir;
-		}
-		else if (tfsDir.exists() && tfsDir.isDirectory()) {
-			currentDirectory = tfsDir;
-		}
-		else if (programDir.exists() && programDir.isDirectory()) {
-			currentDirectory = programDir;
-		}
-		cp.appendln(Color.black, "...setting the starting directory to "+currentDirectory);
-		//Now make a new chooser and set the current directory.
-		chooser = new JFileChooser();
-		chooser.setCurrentDirectory(currentDirectory);
-		chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-		chooser.setDialogTitle("Select a directory in which to install the program");
-		if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-			File dir = chooser.getSelectedFile();
-			cp.appendln(Color.black, "...selected directory: "+dir);
-			return dir;
-		}
-		cp.appendln(Color.red, "...NO DIRECTORY WAS SELECTED; exit.");
-		exit();
-		return null;
-	}
-
 	//If this is a new installation, ask the user for a
 	//port for the server; otherwise, return the negative
 	//of the configured port. If the user selects an illegal
@@ -517,7 +457,7 @@ public class Installer extends JFrame {
 
 	private void installConfigFile(int port) {
 		if (port > 0) {
-			cp.appendln(Color.black, "Looking for /config/config.xml");
+			System.out.println("Looking for /config/config.xml");
 			InputStream is = getClass().getResourceAsStream("/config/config.xml");
 			if (is != null) {
 				try {
@@ -527,16 +467,16 @@ public class Installer extends JFrame {
 					Document doc = getDocument(is);
 					Element root = doc.getDocumentElement();
 					Element server = getFirstNamedChild(root, "Server");
-					cp.appendln("...setting the port to "+port);
+					System.out.println("...setting the port to "+port);
 					server.setAttribute("port", Integer.toString(port));
 					adjustConfiguration(root, ctp);
 					setFileText(config, toString(doc));
 				}
 				catch (Exception ex) {
-					cp.appendln(Color.red, "...Error: unable to install the config.xml file");
+					System.err.println("...Error: unable to install the config.xml file");
 				}
 			}
-			else cp.appendln(Color.red, "...could not find it.");
+			else System.err.println("...could not find it.");
 		}
 	}
 
@@ -601,10 +541,7 @@ public class Installer extends JFrame {
 		}
 		catch (Exception ex) {
 			ex.printStackTrace();
-			JOptionPane.showMessageDialog(this,
-					"Unable to update the windows service install.bat file.",
-					"Windows Service Installer",
-					JOptionPane.INFORMATION_MESSAGE);
+			System.err.println("Unable to update the windows service install.barfile.");
 		}
 	}
 
@@ -655,10 +592,7 @@ public class Installer extends JFrame {
 		}
 		catch (Exception ex) {
 			ex.printStackTrace();
-			JOptionPane.showMessageDialog(this,
-					"Unable to update the Linux service ctpService.sh file.",
-					"Linux Service Installer",
-					JOptionPane.INFORMATION_MESSAGE);
+			System.err.println("Unable to update the Linux service ctpService.sh file");
 		}
 	}
 	
@@ -777,15 +711,6 @@ public class Installer extends JFrame {
 
 	private static void exit() {
 		System.exit(0);
-	}
-
-	private void positionFrame() {
-		Toolkit t = getToolkit();
-		Dimension scr = t.getScreenSize ();
-		setSize( 650, 800 ); //scr.width*2/5, scr.height/3 );
-		int x = (scr.width - getSize().width)/2;
-		int y = (scr.height - getSize().height)/2;
-		setLocation( new Point(x,y) );
 	}
 
 	private String getProgramName() {
@@ -954,6 +879,23 @@ public class Installer extends JFrame {
 		}
 	}
 
+	private boolean startRunner(File dir) {
+		try {
+			Runtime rt = Runtime.getRuntime();
+			ArrayList<String> command = new ArrayList<String>();
+			command.add("java");
+			command.add("-jar");
+			command.add("Runner.jar");
+			command.add("start");
+			String[] cmdarray = command.toArray( new String[command.size()] );
+			Process proc = rt.exec(cmdarray, null, dir);
+			return true;
+		} catch (Exception ex) {
+			System.err.println("Unable to start the Runner program.\n"+ex.getMessage());
+			return false;
+		}
+	}
+
 	private boolean startLauncher(File dir) {
 		try {
 			Runtime rt = Runtime.getRuntime();
@@ -966,10 +908,7 @@ public class Installer extends JFrame {
 			return true;
 		}
 		catch (Exception ex) {
-			JOptionPane.showMessageDialog(this,
-					"Unable to start the Launcher program.\n"+ex.getMessage(),
-					"Start Failed",
-					JOptionPane.INFORMATION_MESSAGE);
+			System.err.println("Unable to start the Launcher program.\n"+ex.getMessage());
 			return false;
 		}
 	}
